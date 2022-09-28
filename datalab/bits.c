@@ -143,7 +143,7 @@ NOTES:
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  return (~((~x)&(~y))) & (~(x&y));
 }
 /* 
  * tmin - return minimum two's complement integer 
@@ -152,9 +152,7 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-
-  return 2;
-
+  return 1 << 31;
 }
 //2
 /*
@@ -165,7 +163,14 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  // idea: (special of tmin) tmax + 1 = ~tmax (expect -1)
+  //       2x+2 = 0 && x+1 != 0
+  // A method to judge whether a == b:
+  // (a & ~b == 0) && (~a & b == 0)
+  // hint: possibly compare with 0
+  int xx2 = 2 + x + x;
+  // It's wierd!! If use `x + x + 2` it turned out to be wrong :(
+  return (!xx2) & (!!(x+1));
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -176,7 +181,11 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+  int AA = 0xAA;
+  AA = (AA << 8) + 0xAA;
+  AA = (AA << 8) + 0xAA;
+  AA = (AA << 8) + 0xAA;
+  return !((~(x & AA)) & AA);
 }
 /* 
  * negate - return -x 
@@ -186,7 +195,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return (~x)+1;
 }
 //3
 /* 
@@ -199,7 +208,12 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  // we can't use `>>4` here as `>>` perform arithmeticly
+  int not_x = ~x;
+  int not_0x3x = ~(0x3F);
+  int check1 = (!(x & not_0x3x)) & (!(not_x & 0x30));
+  int check2 = (!(x & 0x08)) | (!(x & 0x06));
+  return check1 & check2;
 }
 /* 
  * conditional - same as x ? y : z 
@@ -209,7 +223,10 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  int not_x_bin = !x;
+  int x_bin = !not_x_bin;
+  int x_all_bin = (~0) + not_x_bin;
+  return (y & x_all_bin) + (z | x_all_bin) + x_bin;
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -219,7 +236,13 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  // idea: use negation to perform sub
+  int not_y = ~y;
+  int subs = x + not_y;
+  // Two neg cant work out a pos;
+  // Two pos cant work out a neg.
+  int high_deg = (subs | (x & not_y)) & (x | not_y) & (1<<31);
+  return !!(high_deg);
 }
 //4
 /* 
@@ -231,7 +254,15 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+  // x < 0: sign pos
+  // x > 0: +Tmax, then x < 0
+  int deg_pos = 1<<31;
+  int tmax = ~deg_pos;
+  int x_delta = x + tmax;
+  // Take care: the right shift works arithmetically
+  int part1 = (x & deg_pos) >> 31;
+  int part2 = (x_delta & deg_pos) >> 31;
+  return (part1 + 1) & (part2 + 1);
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -246,6 +277,9 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
+  unsigned now_bit = 0;
+  unsigned ans = 0;
+  now_bit = now_bit | ((x & (1 << 30)) >> 30);
   return 0;
 }
 //float
@@ -261,7 +295,24 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+  unsigned get_exp = 0x7F800000;
+  unsigned clear_exp = ~get_exp;
+  unsigned exp = (uf & get_exp) >> 23;
+  unsigned get_frac, clear_frac, frac, ret;
+  if (exp == (get_exp >> 23)){ // Special values
+    return uf;
+  }
+  if (exp == 0){ // Denomolized
+    get_frac = 0x007FFFFF;
+    clear_frac = ~get_frac;
+    frac = uf & get_frac;
+    frac = frac * 2;
+    ret = uf & clear_frac;
+    return ret | frac;
+  }
+  exp++;
+  ret = uf & clear_exp;
+  return ret | (exp << 23);
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -276,7 +327,35 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+  unsigned get_exp = 0x7F800000;
+  unsigned get_s = 0x80000000;
+  unsigned get_frac = 0x00700000;
+  unsigned exp = (uf & get_exp) >> 23;
+  unsigned frac = uf & get_frac;
+  unsigned s = (uf & get_s) >> 31;
+  unsigned ret, hi_dig;
+  int bias, E;
+  if (exp == (get_exp >> 23)){ // Special values
+    return 0x80000000u;
+  }
+  if (exp == 0){ // Denomolized
+    return 0;
+  }
+  bias = 127;
+  E = exp - bias;
+//  printf("%d\n",E);
+  if (E < 0) return 0;
+  if (E > 31) return 0x80000000u;
+  ret = 1;
+  if (s == 1) ret = -1;
+  hi_dig = 22;
+  while (E--){
+    ret = ret << 1;
+    if (hi_dig < 0) continue;
+    ret = ret + (frac & (1 << hi_dig));
+    hi_dig--;
+  }
+  return ret;
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -292,5 +371,24 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+  int bias = 127;
+  unsigned frac_r, exp;
+  if (x > 128) return 0x7F800000u;
+  if (x > -127){
+    exp = x + bias;
+//    printf("exp = %d\n", exp);
+    return exp << 23;
+  } else { // Denormalized
+    frac_r = 22;
+    x = x + 1 - bias;
+//    printf("x = %d\n",x);
+//    printf("frac_r = %d\n",frac_r);
+    if (x < -22 || x > 0){
+      return 0u;
+    } else {
+      frac_r = frac_r + x;
+      exp = 0x000000FFu;
+      return (exp << 23) + (1u << frac_r);
+    }
+  }
 }
